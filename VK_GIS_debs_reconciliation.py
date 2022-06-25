@@ -28,6 +28,7 @@ from kivymd.uix.boxlayout import BoxLayout
 import numpy as np
 import pandas as pd
 import easygui
+import xlrd
 
 KV = '''
 <Content_city>
@@ -125,7 +126,7 @@ class CheckApp(MDApp):
     def getGISAddresses(self, *args) -> list[str]:
         """Read GIS file and collect all GIS requests in list of hashed house addresses.
         Then we compare GIS hashes of addresses with VK hashes of addresses."""
-        datas = pd.read_excel(self.GIS_FileName, sheet_name='Для поставщика')
+        datas = pd.read_excel(self.GIS_FileName, sheet_name='Запросы о задолженности')
         addresses = datas.pop('Адрес дома')
         addresses = list(addresses)
 
@@ -157,7 +158,8 @@ class CheckApp(MDApp):
                 # If don't find city name in dictionary, then start dialog to add new name
                 print('Не найден нас. пункт: ', GIS_cities[i])
                 self.addCity = GIS_cities[i]
-                self.showDialogAddCity(self.addCity)
+                flipped_address = generate_flipped_address(GIS_cities[i])
+                self.showDialogAddCity(self.addCity, flipped_address)
                 return []
 
         for i in range(len(addresses)):
@@ -167,7 +169,8 @@ class CheckApp(MDApp):
                 # If don't find street name in dictionary, then start dialog to add new name
                 print('Не найдена улица: ', GIS_streets[i])
                 self.addStreet = GIS_streets[i]
-                self.showDialogAddStreet(self.addStreet)
+                flipped_address = generate_flipped_address(GIS_streets[i])
+                self.showDialogAddStreet(self.addStreet, flipped_address)
                 return []
 
         # Create as list of hashed list of address fiends.
@@ -455,7 +458,7 @@ class CheckApp(MDApp):
             Application.labelCondition.text = 'Файл со словарями "', DICT_FILE_NAME, '" не найден!'
 
     @mainthread
-    def showDialogAddCity(self, city):
+    def showDialogAddCity(self, city: str, flipped_address: str):
         """DIALOG To add new city. Show in case when next city (from GIS request) not in dicts."""
         if not self.dialog:
             self.dialog = MDDialog(
@@ -480,13 +483,15 @@ class CheckApp(MDApp):
                 ]
             )
             self.dialog.open()
+            self.dialog.content_cls.ids.city.text = flipped_address
 
-    def showDialogAddStreet(self, street):
+    def showDialogAddStreet(self, street: str, flipped_address: str):
         """DIALOG To add new street. Show in case when next street (from GIS request) not in dicts."""
         if not self.dialog:
             self.dialog = MDDialog(
                 title="Добавить улицу: " + street,
                 type='custom',
+
                 size_hint=(0.5, 0.5),
                 pos_hint={'center_x': 0.5, 'center_y': 0.5},
                 content_cls=Content_street(),
@@ -506,6 +511,7 @@ class CheckApp(MDApp):
                 ]
             )
             self.dialog.open()
+            self.dialog.content_cls.ids.street.text = flipped_address
 
     def showDialogExit(self, *args):
         """DIALOG Show whe buttonExit pressed."""
@@ -528,6 +534,15 @@ class CheckApp(MDApp):
                 ],
             )
         self.dialog.open()
+
+
+def generate_flipped_address(name: str) -> str:
+    """Make assumption about what is VK address would be look like.
+    For example: 'ул Жукова' -> 'Жукова ул'
+    Mostly addresses will be converted like that."""
+    parts = name.split(' ')
+    name = ' '.join(parts[::-1])
+    return name
 
 
 def saveData(cities_dict: dict, streets_dict: dict, GISFileName: str, VKFileName: str, reportFilePath: str):
@@ -606,6 +621,7 @@ def getGISAddress(address: str) -> list[str, str, str]:
 
 def getGISFlats(flat: str) -> str:
     """Convert 'кв. 3а' to '3A'. Decided to don't use slash (/) in flats numbers."""
+    flat = str(flat)
     if (len(flat) > 0) and (flat[:3] == 'кв.'):
         flat = flat[3:].upper()
     else:
